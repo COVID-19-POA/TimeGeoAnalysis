@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 
 jhu_opt = {"N": 1, "only_contiguous": True, "max_date": "last"}
+jhu_global_opt = {"N": 1, "max_date": "last"}
 brasil_opt = {"N": 1, "max_date": "last"}
 
 
@@ -9,7 +10,9 @@ class DataService:
   __instance = None
 
   @staticmethod
-  def getInstance(jhu_options=jhu_opt, brasil_options=brasil_opt):
+  def getInstance(jhu_options=jhu_opt,
+                  jhu_global_options = jhu_global_opt,
+                  brasil_options=brasil_opt):
     """Returns instance of DataService.
     This implements a Singleton pattern to make sure that the same instance of this class will be used everywhere
     
@@ -18,20 +21,23 @@ class DataService:
     """
 
     if DataService.__instance == None:
-      DataService(jhu_options, brasil_options)
+      DataService(jhu_options,jhu_global_options, brasil_options)
     return DataService.__instance
 
-  def __init__(self, jhu_options, brasil_options):
+  def __init__(self, jhu_options, jhu_global_options, brasil_options):
     """ Virtually private constructor. """
     if DataService.__instance != None:
       raise Exception("This class is a singleton!")
     else:
       self.jhu_data = None
       self.jhu_metadata = dict()
+      self.jhu_global_data = None
+      self.jhu_global_metadata = dict()
       self.brasil_io_data = None
       self.brasil_io_metadata = dict()
-      self.start_date_columns = {"jhu": 5, "brasil_io": 3}
+      self.start_date_columns = {"jhu": 5, "jhu_global": 3, "brasil_io": 3}
       self.jhu_options = jhu_options
+      self.jhu_global_options = jhu_global_options
       self.brasil_options = brasil_options
       DataService.__instance = self
 
@@ -53,6 +59,25 @@ class DataService:
       self.jhu_data = pd.read_csv(jhu_url)
     return self.jhu_data.copy()
 
+  def get_jhu_global_data(self, force=False):
+    """Get global data from JHU and save locally
+    
+    Keyword Arguments:
+        force {bool} -- If true, get data even if its cached (default: {False})
+    
+    Returns:
+        {DataFrame} -- Data from JHU
+    """
+    if not self.jhu_global_data or force:
+      jhu_url = "https://raw.githubusercontent.com/CSSEGISandData/"\
+          "COVID-19/master/csse_covid_19_data/"\
+          "csse_covid_19_time_series/"\
+          "time_series_covid19_confirmed_global.csv"
+
+      self.jhu_data = pd.read_csv(jhu_url)
+    return self.jhu_data.copy()
+      
+
   def get_brasil_io_data(self, force=False):
     """Get data from brasil.io and save locally
     
@@ -73,7 +98,7 @@ class DataService:
     """Filters DataFrama from source by N and max_date
     
     Arguments:
-        source {str} -- Source of data. Either 'jhu' or 'brasil_io'
+        source {str} -- Source of data. Either 'jhu', 'jhu_global' or 'brasil_io'
         data {DataFrame} -- DataFrame to filter
         N {int} -- Minimal number of cases
         max_date {str} -- If default, return cases from all dates. If defined, return cases until defined date. Format m/d/yy (default: {"last"})
@@ -82,7 +107,8 @@ class DataService:
         {DataFrame} -- Filtered DataFrame
     """
 
-    metadata = self.jhu_metadata if source == "jhu" else self.brasil_io_metadata
+    metadata = self.jhu_metadata if source == "jhu" else self.brasil_io_metadata\
+        if source =="brasil_io" else self.jhu_global_metadata
     start_date_columns = self.start_date_columns[source]
     metadata["date_cols"] = list(data.columns)
 
@@ -95,7 +121,7 @@ class DataService:
     data = data.sort_values(by=metadata["date_cols"],
                             ascending=np.zeros(len(metadata["date_cols"]),
                                                dtype=bool))
-
+    
     nfi = []
     metadata["uid_positive"] = []
     for uid in data['UID'].tolist():
@@ -157,10 +183,10 @@ class DataService:
   def get_filtered_jhu_data(self, options=None):
     """Get data from JHU and filters it using the arguments
     
-    Keyword Arguments:
-        options {JhuOptions} Options to be used in the filter
+       Keyword Arguments:
+         options {JhuOptions} Options to be used in the filter
     
-    Returns:
+       Returns:
         {DataFrame} -- JHU DataFrame filtered by arguments
     """
     options = options if options != None else self.jhu_options
@@ -179,6 +205,25 @@ class DataService:
       data = data.loc[~data['Province_State'].isin(non_contiguous)]
 
     return self.__filter_N_max_data('jhu', data, N, max_date)
+
+  def get_clustered_global_jhu_data(self, options=None):
+      """Get data from JHU and groups by country
+    
+         Returns:
+          {DataFrame} -- JHU global DataFrame by country
+      """
+      options = options if options != None else self.jhu_global_options
+      N = options["N"]
+      max_date = options["max_date"]
+      
+      data = self.get_jhu_global_data()
+      data = data.groupby(['Country/Region']).sum()
+      data = data.reset_index()
+      data = data.rename(columns={'Country/Region': 'UID'})
+      
+      self.jhu_global_data = data
+      
+      return self.__filter_N_max_data('jhu_global', data, N, max_date)
 
   def save_to_file(self, data, out_file="output.csv"):
     """Save DataFrame to csv file

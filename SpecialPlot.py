@@ -37,8 +37,8 @@ class SpecialPlot:
                    })
 
     mp.legend(loc='upper left', fontsize=20)
-    mp.xlabel("Days from outbreak to " + str(data_list[0].N) +
-              " cases in county",
+    mp.xlabel("Days from outbreak to case number " + str(data_list[0].N) +
+              " in county",
               fontsize=18)
     mp.ylabel("Frequency", fontsize=18)
 

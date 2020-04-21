@@ -69,3 +69,21 @@ class TimeSeries:
     data = self.data_service.get_filtered_jhu_data(options)
 
     self.__hist_first_infections(data, out_file, x_label, title, divs)
+    
+  def jhu_global_hist_first_infections(self,
+                                       out_file="jhu_history",
+                                       x_label="",
+                                       title="",
+                                       divs=45):
+    """Creates a histogram of JHU global Data
+    
+    Keyword Arguments:
+        out_file {str} -- Name of the image file (default: {"brasil_history"})
+        x_label {str} -- Label for the X axis (default: {""})
+        title {str} -- Title of the plot (default: {""})
+        divs {int} -- Size of histogram bins (default: {45})
+    """
+  
+    data = self.data_service.get_clustered_global_jhu_data()
+    
+    self.__hist_first_infections(data, out_file, x_label, title, divs)
