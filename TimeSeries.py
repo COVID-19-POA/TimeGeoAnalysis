@@ -4,6 +4,7 @@ Created on Sat Apr 18 14:41:44 2020
 
 """
 import matplotlib.pyplot as mp
+from matplotlib.ticker import MaxNLocator
 from DataService import DataService
 
 
@@ -21,14 +22,21 @@ class TimeSeries:
         title {str} -- Title of the plot
         divs {int} -- Size of histogram bins
     """
-    fig, plot = mp.subplots(1, 1, figsize=(10, 10), constrained_layout=True)
-
+    
+    tick = mp.figure(figsize=(15,10)).gca()
+    tick.yaxis.set_major_locator(MaxNLocator(integer=True))
     filtered_data = data[data.Day_First_N_Infections != "None"]
-    plot.hist(filtered_data["Day_First_N_Infections"].values, bins=divs)
+    tick.hist(filtered_data["Day_First_N_Infections"].values, 
+              bins=divs,
+              edgecolor='black',
+              linewidth=1)
     mp.xlabel(x_label, fontsize=18)
     mp.ylabel("Frequency", fontsize=18)
+    mp.xlim(left=-1,right=max(filtered_data["Day_First_N_Infections"].values)+1)
     mp.title(title, fontsize=22)
-    fig.savefig(out_file)
+    
+    
+    mp.savefig(out_file)
 
   def brasil_hist_first_infections(self,
                                    out_file="brasil_history",
