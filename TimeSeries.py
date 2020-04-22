@@ -95,3 +95,14 @@ class TimeSeries:
     data = self.data_service.get_clustered_global_jhu_data()
     
     self.__hist_first_infections(data, out_file, x_label, title, divs)
+
+  def euod_hist_fist_infections(self,
+                                       out_file="euod_history",
+                                       x_label="",
+                                       title="",
+                                       divs=45):
+    """Creates a histogram of EU OpenData global dataset
+    """
+    data = self.data_service.time_series_euod()
+    
+    self.__hist_first_infections(data, out_file, x_label, title, divs)

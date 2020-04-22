@@ -4,6 +4,7 @@ import numpy as np
 jhu_opt = {"N": 1, "only_contiguous": True, "max_date": "last"}
 jhu_global_opt = {"N": 1, "max_date": "last"}
 brasil_opt = {"N": 1, "max_date": "last"}
+euod_opt = {"N": 1, "max_date": "last"}
 
 
 class DataService:
@@ -12,7 +13,8 @@ class DataService:
   @staticmethod
   def getInstance(jhu_options=jhu_opt,
                   jhu_global_options = jhu_global_opt,
-                  brasil_options=brasil_opt):
+                  brasil_options=brasil_opt,
+                  euod_options=euod_opt):
     """Returns instance of DataService.
     This implements a Singleton pattern to make sure that the same instance of this class will be used everywhere
     
@@ -21,10 +23,10 @@ class DataService:
     """
 
     if DataService.__instance == None:
-      DataService(jhu_options,jhu_global_options, brasil_options)
+      DataService(jhu_options,jhu_global_options, brasil_options, euod_options)
     return DataService.__instance
 
-  def __init__(self, jhu_options, jhu_global_options, brasil_options):
+  def __init__(self, jhu_options, jhu_global_options, brasil_options, euod_options):
     """ Virtually private constructor. """
     if DataService.__instance != None:
       raise Exception("This class is a singleton!")
@@ -35,10 +37,13 @@ class DataService:
       self.jhu_global_metadata = dict()
       self.brasil_io_data = None
       self.brasil_io_metadata = dict()
-      self.start_date_columns = {"jhu": 5, "jhu_global": 3, "brasil_io": 3}
+      self.euod_data = None
+      self.euod_metadata = dict()
+      self.start_date_columns = {"jhu": 5, "jhu_global": 3, "brasil_io": 3, "euod": 1}
       self.jhu_options = jhu_options
       self.jhu_global_options = jhu_global_options
       self.brasil_options = brasil_options
+      self.euod_options = euod_options
       DataService.__instance = self
 
   def get_jhu_data(self, force=False):
@@ -94,11 +99,20 @@ class DataService:
       self.brasil_io_data = pd.read_csv(brasil_io_url)
     return self.brasil_io_data.copy()
 
+  def get_euod_data(self, force=False):
+    """
+    """
+    if not self.euod_data or force:
+      euod_url = "https://opendata.ecdc.europa.eu/covid19/casedistribution/csv"
+
+      self.euod_data = pd.read_csv(euod_url)
+    return self.euod_data.copy()
+
   def __filter_N_max_data(self, source, data, N, max_date):
     """Filters DataFrama from source by N and max_date
     
     Arguments:
-        source {str} -- Source of data. Either 'jhu', 'jhu_global' or 'brasil_io'
+        source {str} -- Source of data. Either 'jhu', 'jhu_global', 'brasil_io' or 'euod'
         data {DataFrame} -- DataFrame to filter
         N {int} -- Minimal number of cases
         max_date {str} -- If default, return cases from all dates. If defined, return cases until defined date. Format m/d/yy (default: {"last"})
@@ -108,7 +122,8 @@ class DataService:
     """
 
     metadata = self.jhu_metadata if source == "jhu" else self.brasil_io_metadata\
-        if source =="brasil_io" else self.jhu_global_metadata
+        if source == "brasil_io" else self.jhu_global_metadata\
+        if source == "jhu_global" else self.euod_metadata
     start_date_columns = self.start_date_columns[source]
     metadata["date_cols"] = list(data.columns)
 
@@ -224,6 +239,48 @@ class DataService:
       self.jhu_global_data = data
       
       return self.__filter_N_max_data('jhu_global', data, N, max_date)
+
+  def time_series_euod(self, options=None):
+    """Get data from EU OpenData and generates the time series
+    
+    Keyword Arguments:
+        options {EuODOptions} -- Options to be used in the filter
+    
+    Returns:
+        {DataFrame} -- Global DataFrame filtered by arguments
+    """
+    options = options if options != None else self.euod_options
+    N = options["N"]
+    max_date = options["max_date"]
+
+    data = self.get_euod_data()
+    data = data.sort_values(by=['year', 'month','day'])
+
+    uids = data["countriesAndTerritories"].unique().tolist()
+    dates = data["dateRep"].unique().tolist()
+
+    #countries = []
+    #for uid in uids:
+    #  countries.append(data.loc[
+    #    data["countryterritoryCode"] == uid, "countriesAndTerritories"].values[0])
+  
+    # Usa o mesmo nome de colunas do arquivo da JHU por simplicidade
+    new_data = pd.DataFrame(data=uids, columns=["UID"])
+    #new_data["Country"] = countries
+
+    for date in dates:
+      daily_data = data.loc[data["dateRep"] == date]
+      codes = daily_data["countriesAndTerritories"].tolist()
+      new_data[date] = np.zeros(len(uids))
+
+      for code in codes:
+        i = new_data.index[new_data["UID"] == code].values[0]
+        new_data.at[i, date] =\
+          daily_data.loc[daily_data["countriesAndTerritories"] == code, 
+            "cases"].values[0]
+
+    return self.__filter_N_max_data('euod', new_data, N, max_date)
+
 
   def save_to_file(self, data, out_file="output.csv"):
     """Save DataFrame to csv file
